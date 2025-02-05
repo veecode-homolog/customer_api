@@ -26,6 +26,30 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   annotations:
+    konghq.com/methods: PATCH
+    konghq.com/regex-priority: "200"
+    konghq.com/strip-path: "false"
+    konghq.com/tags: ""
+    konghq.com/preserve-host: "false"
+  name: customer-api-customer-api-customers-patch
+spec:
+  ingressClassName: kong
+  rules:
+    - http:
+        paths:
+          - backend:
+              service:
+                name: customer-api
+                port:
+                  number: 80
+            path: /~/customers$
+            pathType: ImplementationSpecific
+      host: cluster-k8s-playrole.vkpr.platform.vee.codes
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
     konghq.com/methods: POST
     konghq.com/regex-priority: "200"
     konghq.com/strip-path: "false"
@@ -98,12 +122,12 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   annotations:
-    konghq.com/methods: PATCH
-    konghq.com/regex-priority: "100"
+    konghq.com/methods: GET
+    konghq.com/regex-priority: "200"
     konghq.com/strip-path: "false"
     konghq.com/tags: ""
     konghq.com/preserve-host: "false"
-  name: customer-api-customer-api-customers-customerid-patch
+  name: customer-api-customer-api-health-get
 spec:
   ingressClassName: kong
   rules:
@@ -114,7 +138,7 @@ spec:
                 name: customer-api
                 port:
                   number: 80
-            path: /~/customers/(?<customerid>[^#?/]+)$
+            path: /~/health$
             pathType: ImplementationSpecific
       host: cluster-k8s-playrole.vkpr.platform.vee.codes
 ---
