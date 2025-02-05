@@ -74,7 +74,7 @@ jobs:
       - name: Apply Kubernetes configuration
         run: |
            mkdir -p ~/.kube
-           scp -i ./cert.pem -o StrictHostKeyChecking=no $USERNAME@$Host:config ~/.kube/config
+           scp -i ./cert.pem -o StrictHostKeyChecking=no $USERNAME@${{ env.Host }}:config ~/.kube/config
            CERTIFICATE=`cat  ~/.kube/config |grep certificate-authority-data`
            sed -i "s|$CERTIFICATE|    insecure-skip-tls-verify: true|g" ~/.kube/config
            sed -i "s|0.0.0.0||g" ~/.kube/config
