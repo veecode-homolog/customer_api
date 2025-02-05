@@ -3,7 +3,7 @@ kind: API
 metadata:
   name: customer_api
   title: customer_api
-  publishedAt: "2025-02-05 14:03:06"
+  publishedAt: "2025-02-05 14:32:17"
   description: API for managing customers
   tags: []
 spec:
@@ -41,7 +41,7 @@ spec:
                 requestBody:
                     required: true
                     content:
-                        multipart/form-data:
+                        application/json:
                             schema:
                                 type: object
                                 properties:
