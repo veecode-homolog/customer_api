@@ -3,7 +3,7 @@ kind: API
 metadata:
   name: customer_api
   title: customer_api
-  publishedAt: "2025-02-05 13:18:42"
+  publishedAt: "2025-02-05 13:22:08"
   description: API for managing customers
   tags: []
 spec:
@@ -15,7 +15,7 @@ spec:
     info:
         title: Customer API
         description: API for managing customers
-        version: 1.0.0
+        version: 1.0.1
     servers:
         - url: https://cluster-k8s-playrole.vkpr.platform.vee.codes
     paths:
@@ -37,7 +37,7 @@ spec:
                                     - name
                                     - email
                 responses:
-                    '200':
+                    '201':
                         description: Customer created successfully
                         content:
                             application/json:
@@ -87,33 +87,10 @@ spec:
                                     properties:
                                         customer:
                                             $ref: '#/components/schemas/Customer'
-                    '400':
-                        description: CustomerId is required
+                    '404':
+                        description: Customer not found
                     '500':
                         description: Internal Server Error
-            delete:
-                summary: Delete customer by ID
-                parameters:
-                    - name: customerId
-                      in: path
-                      required: true
-                      schema:
-                        type: string
-                responses:
-                    '200':
-                        description: Customer deleted successfully
-                        content:
-                            application/json:
-                                schema:
-                                    type: object
-                                    properties:
-                                        message:
-                                            type: string
-                    '400':
-                        description: CustomerId is required
-                    '500':
-                        description: Internal Server Error
-        /customers:
             patch:
                 summary: Update customer
                 parameters:
@@ -127,7 +104,18 @@ spec:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/Customer'
+                                type: object
+                                properties:
+                                    name:
+                                        type: string
+                                    email:
+                                        type: string
+                                    status:
+                                        type: string
+                                        enum: ['active', 'inactive']
+                                required:
+                                    - name
+                                    - email
                 responses:
                     '200':
                         description: Customer updated successfully
@@ -136,7 +124,24 @@ spec:
                                 schema:
                                     $ref: '#/components/schemas/Customer'
                     '400':
-                        description: CustomerId is required
+                        description: Bad Request
+                    '404':
+                        description: Customer not found
+                    '500':
+                        description: Internal Server Error
+            delete:
+                summary: Delete customer by ID
+                parameters:
+                    - name: customerId
+                      in: path
+                      required: true
+                      schema:
+                        type: string
+                responses:
+                    '204':
+                        description: Customer deleted successfully
+                    '404':
+                        description: Customer not found
                     '500':
                         description: Internal Server Error
     components:
@@ -151,7 +156,8 @@ spec:
                     email:
                         type: string
                     status:
-                        type: boolean
+                        type: string
+                        enum: ['active', 'inactive']
                     created_at:
                         type: string
                         format: date-time
