@@ -62,7 +62,7 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
       - name: Write secret to file
         run: |
-          echo "" > cert.pem
+          echo "${{ secrets.KEYPAIR }}" > cert.pem
           chmod 600 cert.pem
 
       - name: Generate kube config with k3s
