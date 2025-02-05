@@ -7,7 +7,7 @@ metadata:
     github.com/project-slug: veecode-homolog/customer_api
     backstage.io/techdocs-ref: dir:..
     github.com/workflows: publish.yml,remove.yml
-    kong-manager/service-name: app.customer_api.80
+    kong-manager/service-name: app.customer-api.80
     kong-manager/instance: cluster-k8s-playrole
     kong-manager/spec : openapi-swagger.yaml
 spec:
