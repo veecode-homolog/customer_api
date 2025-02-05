@@ -1,0 +1,115 @@
+name: spec-project
+on: 
+  workflow_dispatch:
+
+env:
+  PROJECT_NAME: "customer_api"
+  HOST_NAME: "cluster-k8s-playrole.vkpr.platform.vee.codes"
+  CORS_ORIGIN_LIST: "https://devportal-homolog.apr.vee.codes,https://devportal.apr.vee.codes"
+  PORT: 6550
+  USERNAME: "ec2-user"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installing Kong Deck CLI
+        uses: kong/setup-deck@v1
+
+      - name: Generating K8s Artefacts for external service
+        run: |
+          TEMP_DIR=$(mktemp -d)
+          touch ${TEMP_DIR}/service.yaml ${TEMP_DIR}/kong-plugin.yaml
+          cp openapi-swagger.yaml ${TEMP_DIR}/openapi-swagger.yaml
+          SERVER=$(yq -e '.servers[0].url' ${TEMP_DIR}/openapi-swagger.yaml | sed 's:/*$::')
+          EXTERNAL_HOST_NAME=$(echo $SERVER | sed 's~http[s]*://~~' | cut -d'/' -f1)
+
+          echo "Keeping the original paths of the OpenAPI specification."
+
+          deck file openapi2kong --spec ${TEMP_DIR}/openapi-swagger.yaml | deck file kong2kic --ingress --output-file ${TEMP_DIR}/kong.yaml
+
+          readarray -t ingressEntries < <(yq -e -o=j -I=0 'select(.kind == "Ingress")' ${TEMP_DIR}/kong.yaml)
+          declare -A serviceMap
+          for INGRESS_ENTRY in "${ingressEntries[@]}"; do
+              service_name=$(echo "$INGRESS_ENTRY" | yq -e '.spec.rules[].http.paths[].backend.service.name' -)
+              serviceMap["$service_name"]=$EXTERNAL_HOST_NAME
+          done
+
+          echo "Keeping the name of the original service in Ingress."
+
+          yq ${TEMP_DIR}/kong-plugin.yaml ${TEMP_DIR}/service.yaml ${TEMP_DIR}/kong.yaml > ${TEMP_DIR}/kubernetes.yaml
+          yq -e "(select(.kind == \"Ingress\").spec.rules[].host) = \"${HOST_NAME}\"" -i ${TEMP_DIR}/kubernetes.yaml
+          yq -e '(select(.kind == "Ingress") | .spec.rules[].http.paths[].backend.service.port.number)=80' -i ${TEMP_DIR}/kubernetes.yaml
+          yq -e '(select(.kind == "Ingress") | .metadata.annotations."konghq.com/preserve-host")="false"' -i ${TEMP_DIR}/kubernetes.yaml
+          yq -e '(select(.kind == "Service") | .spec)={}' -i ${TEMP_DIR}/kubernetes.yaml
+          yq -e '(select(.kind == "Service") | .spec.type)="ExternalName"' -i ${TEMP_DIR}/kubernetes.yaml
+          yq -e "(select(.kind == \"Service\") | .spec.externalName)=\"$EXTERNAL_HOST_NAME\"" -i ${TEMP_DIR}/kubernetes.yaml
+          yq -e '(select(.kind == "Service") | .metadata.annotations."konghq.com/protocol") = "http"' -i ${TEMP_DIR}/kubernetes.yaml
+          rm ${TEMP_DIR}/service.yaml ${TEMP_DIR}/kong.yaml ${TEMP_DIR}/kong-plugin.yaml
+
+          mkdir -p k8s
+          cp ${TEMP_DIR}/kubernetes.yaml ./k8s/kubernetes.yaml
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: 
+          aws-secret-access-key: 
+          aws-region: 
+      - name: Write secret to file
+        run: |
+          echo "" > cert.pem
+          chmod 600 cert.pem
+
+      - name: Generate kube config with k3s
+        run: |
+          HOST=`aws ec2 describe-instances --filters 'Name=tag:Name,Values=cluster-k8s-playrole' --output text --query 'Reservations[*].Instances[*].PublicIpAddress'`
+          ssh -i ./cert.pem -o StrictHostKeyChecking=no $USERNAME@$HOST "mkdir -p .kube && k3d kubeconfig get cluster-k8s-playrole > config"
+          echo "Host=$HOST" >> $GITHUB_ENV
+
+      - name: Apply Kubernetes configuration
+        run: |
+           mkdir -p ~/.kube
+           scp -i ./cert.pem -o StrictHostKeyChecking=no $USERNAME@:config ~/.kube/config
+           CERTIFICATE=`cat  ~/.kube/config |grep certificate-authority-data`
+           sed -i "s|$CERTIFICATE|    insecure-skip-tls-verify: true|g" ~/.kube/config
+           sed -i "s|0.0.0.0||g" ~/.kube/config
+           kubectl create ns app --dry-run=client -o yaml | kubectl apply -f -
+           kubectl apply -f ./k8s/kubernetes.yaml -n app
+
+      - name: Build devportal template
+        env:
+          NAME: ""
+          TAGS: ""
+        run: |
+          mkdir -p api/
+          NAME=`echo $PROJECT_NAME`
+          echo $NAME
+          touch ".platform/spec-api.yaml"
+          yq ".servers = [{\"url\": \"https://$HOST_NAME\"}]" -i ./openapi-swagger.yaml
+          sed --in-place "s|\"|'|g" ./openapi-swagger.yaml
+          yq eval ".apiVersion = \"backstage.io/v1alpha1\"" -i ".platform/spec-api.yaml"
+          yq eval ".kind = \"API\" " -i ".platform/spec-api.yaml"
+          yq eval ".metadata.name=strenv(NAME)" -i ".platform/spec-api.yaml"
+          yq eval ".metadata.title=strenv(NAME)" -i ".platform/spec-api.yaml"
+          yq eval ".metadata.publishedAt=\"$(date '+%Y-%m-%d %T')\"" -i ".platform/spec-api.yaml"
+          yq eval ".metadata.description= \"$(cat ./openapi-swagger.yaml | yq e '.info.description')\"" -i ".platform/spec-api.yaml"
+          yq eval ".metadata.tags = (strenv(TAGS) | sub(\" +\", \"\") | split(\",\"))" -i ".platform/spec-api.yaml"
+          yq eval ".spec.type = \"openapi\"" -i ".platform/spec-api.yaml"
+          yq eval ".spec.lifecycle = \"production\"" -i ".platform/spec-api.yaml"
+          yq eval ".spec.owner = \"consumer\"" -i ".platform/spec-api.yaml"
+          yq eval ".spec.definition = \"$(yq -I4 ./openapi-swagger.yaml)\"" --inplace ".platform/spec-api.yaml"
+
+      - name: Publish generated artifacts
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          file_pattern: ".platform/* k8s/*"
+          commit_user_name: veecode-bot
+          commit_user_email: github-admin@vee.codes
+          commit_author: veecode-bot<github-admin@vee.codes>
+          commit_message: "Publish api and kubernetes.yaml"
+          push_options: '--force'

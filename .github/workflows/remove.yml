@@ -1,0 +1,40 @@
+name: remove-project
+on: 
+  workflow_dispatch:
+
+env:
+  USERNAME: "ec2-user"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Write secret to file
+        run: |
+          echo "${{ secrets.KEYPAIR }}" > cert.pem
+          chmod 600 cert.pem
+
+      - name: Generate kube config with k3s  		
+        run: |
+          HOST=`aws ec2 describe-instances --filters 'Name=tag:Name,Values=cluster-k8s-playrole' --output text --query 'Reservations[*].Instances[*].PublicIpAddress'`
+          ssh -i ./cert.pem -o StrictHostKeyChecking=no $USERNAME@$HOST "mkdir -p .kube && k3d kubeconfig get k3s > ~/.kube/config"
+          echo "Host=$HOST" >> $GITHUB_ENV
+
+      - name: 
+        run: |
+           mkdir -p ~/.kube
+           scp -i ./cert.pem -o StrictHostKeyChecking=no $USERNAME@${{ env.Host }}:~/.kube/config ~/.kube/config
+           CERTIFICATE=`cat  ~/.kube/config |grep certificate-authority-data `
+           sed -i "s|$CERTIFICATE|    insecure-skip-tls-verify: true|g" ~/.kube/config
+           sed -i "s|0.0.0.0|${{ env.Host }}|g" ~/.kube/config
+           kubectl delete -f ./k8s/kubernetes.yaml -n app          
