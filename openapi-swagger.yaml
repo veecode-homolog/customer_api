@@ -5,6 +5,23 @@ info:
   version: 1.0.0
 servers:
   - url: https://customer.cluster-k8s-playrole.vkpr.platform.vee.codes
+x-kong-rate-limiting:
+  name: rate-limiting
+  enabled: true
+  config:
+    hide_client_headers: false
+    redis_timeout: 2000
+    redis_ssl_verify: false
+    error_message: API rate limit exceeded
+    redis_port: 6379
+    policy: local
+    redis_database: 0
+    fault_tolerant: true
+    error_code: 429
+    limit_by: consumer
+    redis_ssl: false
+    minute: 5
+    sync_rate: -1
 paths:
   /health:
     get:
@@ -34,10 +51,10 @@ paths:
               properties:
                 name:
                   type: string
-                  description: "Name of the customer"
+                  description: Name of the customer
                 email:
                   type: string
-                  description: "Email of the customer"
+                  description: Email of the customer
               required:
                 - name
                 - email
