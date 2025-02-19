@@ -39,6 +39,11 @@ paths:
                   timestamp:
                     type: string
                     format: date-time
+      x-kong-basic-auth:
+        name: basic-auth
+        enabled: true
+        config:
+          hide_credentials: false
   /customers:
     post:
       summary: Create a new customer
